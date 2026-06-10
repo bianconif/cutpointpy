@@ -98,3 +98,46 @@ def cm_performance_metrics(cm):
         retval.append(np.array(item, ndmin=2).T)
     
     return retval
+
+def auc(se, sp):
+    """
+    Compute the area under the Receiver-operating characteristic (ROC) 
+    curve.
+    
+    Parameters
+    ----------
+    se : ndarray of numeric (n_tests, n_thresholds)
+        Sensitivity as a function of the thresholds.
+    sp : ndarray of numeric (n_tests, n_thresholds)
+        Specificity as a function of the thresholds.
+        
+    Returns
+    -------
+    auc : float (n_tests, 1)
+        The areas under the curve.
+    
+    Notes
+    -----
+    1.    Vectorised function, computes n_tests AUCs at once.
+    2.    It is assumed that in each row `se` and `sp` are matched by 
+          threshold value. That is, for each row of `se` and `sp` 
+          the same column index corresponds to the same threshold value.
+    3.    Area calculation is based on the trapezoidal rule.
+    """
+
+    if not (se.shape == sp.shape):
+        raise ValueError(f'`se` and `sp` must have the same shape')
+
+    #Compute true positive rate (TPR) and false positive rate (FPR)
+    tpr = se
+    fpr = 1 - sp
+
+    #Sort by FPR in increasing order
+    sorted_idxs = np.argsort(fpr)
+    tpr = np.take_along_axis(tpr, sorted_idxs)
+    fpr = np.take_along_axis(fpr, sorted_idxs)
+
+    #Compute AUC
+    auc = np.array(np.trapezoid(y=tpr, x=fpr), ndmin=2).T
+
+    return auc
