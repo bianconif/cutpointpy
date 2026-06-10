@@ -1,7 +1,8 @@
 import numpy as np
-import warnings
+from sklearn.model_selection import StratifiedShuffleSplit
 
-from cutpointpy.utils import check_same_length, cm, cm_performance_metrics
+from cutpointpy.utils import auc as area_under_curve,\
+     check_same_length, cm, cm_performance_metrics
 
 def optimal_cutpoint(thresholds, se, sp, target):
     """
@@ -51,8 +52,6 @@ def optimal_cutpoint(thresholds, se, sp, target):
             raise ValueError(
                 f'Target `{target}` not recognised.')
         
-
-
     return thresholds[idx, 0], idx
         
 
@@ -101,6 +100,9 @@ def cutpoint(features, labels, target='youdenj', above=True,
         Sensitivity as a function of the thresholds.
     sp : ndarray of numeric (N,1)
         Specificity as a function of the thresholds.
+    auc : float
+        The area under the receiver-operating characteristic (ROC) 
+        curve.
     
     References :
         - Hassanzad and Haijan-Tilaki (2024) doi:10.1186/s12874-024-02198-2 
@@ -135,6 +137,107 @@ def cutpoint(features, labels, target='youdenj', above=True,
     else:
         thresholds = features
         
+    acc, se, sp, cutpoint, cutpoint_idx, auc = test_cutoff_values(
+        features=features, 
+        labels=labels, 
+        thresholds=thresholds,
+        above=above,
+        target=target
+    )
+                
+    return cutpoint, cutpoint_idx, thresholds.T, se, sp, auc
+
+def cutpoint_boot(features, labels, method='sss', train_ratio=0.7, 
+                  nruns=30, random_state=0, cutpoint_kw=None):
+    """
+    Compute/validate optimal cut-point trough bootstrapping.
+    
+    Parameters
+    ----------
+    features : iterable of numeric (n_samples)
+        Value of the predictor variable for each datapoint. It is 
+        converted to ndarray of float internally.
+    labels : iterable of numeric (n_samples)
+        Class label of each datapoint, where 0 indicates negative and 
+        any other value positive. It is converted to ndarray of bool 
+        internally.
+    method : str
+        The strategy for generating bootstratp repetitions - i.e.,
+        subdivisions of the original data into train and test set.
+        Possible values:
+            `sss` -> Stratified shuffle split
+    train_ratio : float [0.0, 1.0]
+        The proportion of the original data used to estimate the cut-
+        point value (train set)
+    nruns : int
+        Number of bootstrap repetitions (i.e., number of subdivisions
+        into train and test set).
+    random_state : int
+        Controls the randomness of the repetitions produced. Pass an 
+        int for reproducible output across multiple function calls, 
+        None for non-reproducible output.
+    cutpoint_kw : dict (optional)
+        Keyword arguments to be passed to the `cutpoint` function (see 
+        related documentation for details).
+    Returns
+    -------
+    """
+    check_same_length(features, labels)
+    
+    match method:
+        case 'sss':
+            splitter = StratifiedShuffleSplit(
+                n_splits=nruns, 
+                train_size=train_ratio, 
+                random_state=random_state
+            )
+        case _:
+            raise ValueError(f'Unrecognised method `{method}`.')
+        
+    for i, (train_idxs, test_idxs) in enumerate(
+        splitter.split(X=features, y=labels)):
+        
+        train_features = features[train_idxs]
+        train_labels = labels[train_idxs]
+        test_features = features[test_idxs]
+        test_labels = labels[test_idxs]        
+
+def test_cutoff_values(features, labels, thresholds, above, target):
+    """
+    Test the classification performance of a set of cut-off values
+    for a binary classification task.
+    
+    Parameters
+    ----------
+    features : ndarray of float (n_features, 1)
+        Value of the predictor variable for each datapoint. 
+    labels : ndarray of bool (n_features, 1)
+        Class label of each datapoint, where True indicates the
+        positive class.
+    thresholds : ndarray of float (n_thresholds, 1)
+        The cut-off values to be tested, sorted in ascending order.
+    above : bool
+        The direction of the inequality. If True the datapoints with
+        feature value above the threshold are flagged as positive,
+        and those with value below the threshold as negative. If False
+        the reverse happens.
+    target : str
+        The target function to maximise or minimise. See 
+        `optimal_cutpoint()` fro possible values.
+        
+    Returns
+    -------
+    acc, se, sp : ndarrays of float, each of shape (n_thresholds, 1)
+        Accuracy, sensitivity ans pecificity as a function of the 
+        cut-off value.
+    cutpoint : float    
+        The optimal cut-off value.
+    cutpoint_idx : int [0, (n_thresholds - 1)]
+        Index of the optimal cut-off value.
+    auc : float
+        The area under the curve.
+    """
+    
     #Reshape features and thresholds for vectorisation. Prepend 'r_' to
     #indicate the reshaped versions
     r_features = np.tile(features, reps=(thresholds.size, 1))
@@ -149,12 +252,14 @@ def cutpoint(features, labels, target='youdenj', above=True,
     #Sensitivity and specificity as a function of threshold
     confmat = cm(predicted=predicted,
                  target=np.tile(labels, reps=(thresholds.size, 1)))
-    _, se, sp = cm_performance_metrics(confmat)
+    acc, se, sp = cm_performance_metrics(confmat)
     
     #Optimal cutpoint
     thresholds = thresholds.T
     cutpoint, cutpoint_idx = optimal_cutpoint(
         thresholds=thresholds, se=se, sp=sp, target=target)
-        
-    return cutpoint, cutpoint_idx, thresholds, se, sp
-
+    
+    #AUC
+    auc = area_under_curve(se=se, sp=sp).flatten()[0]
+    
+    return acc, se, sp, cutpoint, cutpoint_idx, auc
