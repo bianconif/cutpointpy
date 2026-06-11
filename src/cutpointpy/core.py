@@ -4,9 +4,9 @@ from sklearn.model_selection import StratifiedShuffleSplit
 from cutpointpy.utils import auc as area_under_curve,\
      check_same_length, cm, cm_performance_metrics
 
-def optimal_cutpoint(thresholds, se, sp, target):
+def _compute_optimal_cutpoint(thresholds, se, sp, target):
     """
-    Determine he optimal cut-point given sensitivity and specificity as a 
+    Determine the optimal cut-point given sensitivity and specificity as a 
     function of the thresholds tested.
     
     Parameters
@@ -55,8 +55,8 @@ def optimal_cutpoint(thresholds, se, sp, target):
     return thresholds[idx, 0], idx
         
 
-def cutpoint(features, labels, target='youdenj', above=True,
-             interpolation=None, num_points=100):
+def find_cutpoint(features, labels, above=True, target='youdenj', 
+                  interpolation=None, num_points=100):
     """
     Determine the optimal cut-point value of a predictor variable (feature) 
     for a binary classification task.
@@ -69,14 +69,14 @@ def cutpoint(features, labels, target='youdenj', above=True,
     labels : iterable of numeric (n_samples)
         Class label of each datapoint, where 0 indicates negative and any
         other value positive. It is converted to ndarray of bool internally.
-    target : str
-        The target function to maximise. See `_optimal_cutpoint()` for
-        possible values.
     above : bool
         The direction of the inequality. If True the datapoints with
         feature value above the threshold are flagged as positive,
         and those with value below the threshold as negative. If False
         the reverse happens.
+    target : str
+        The target function to maximise. See `_optimal_cutpoint()` for
+        possible values.
     interpolation : str [optional]
         Interpolation method for generating the set of thresholds tested.
         Possible values:
@@ -89,13 +89,15 @@ def cutpoint(features, labels, target='youdenj', above=True,
 
     Returns
     -------
-    cutpoint : numeric
+    cutpoint : float
         The optimal cut-point value.
     cutpoint_idx : int
         The index corresponding to optimal cut-point value.
     thresholds : ndarray of numeric (N,1)
         The thresholds tested. N = len(features) if interpolation = None,
         otherwise N = num_points.
+    acc : ndarray of numeric (N,1)
+        Accuracy as a function of the thresholds.
     se : ndarray of numeric (N,1)
         Sensitivity as a function of the thresholds.
     sp : ndarray of numeric (N,1)
@@ -131,13 +133,14 @@ def cutpoint(features, labels, target='youdenj', above=True,
             case 'linear':
                 thresholds = np.interp(
                     x=lingrid, xp=features[0, :], fp=features[0, :])
+                thresholds = np.array(thresholds, ndmin=2)
             case _:
                 raise ValueError(f'Interpolation "{interpolation}" not '
                                  f'recognised')
     else:
         thresholds = features
         
-    acc, se, sp, cutpoint, cutpoint_idx, auc = test_cutoff_values(
+    acc, se, sp, cutpoint, cutpoint_idx, auc = _test_cutoff_values(
         features=features, 
         labels=labels, 
         thresholds=thresholds,
@@ -145,10 +148,11 @@ def cutpoint(features, labels, target='youdenj', above=True,
         target=target
     )
                 
-    return cutpoint, cutpoint_idx, thresholds.T, se, sp, auc
+    return cutpoint, cutpoint_idx, thresholds.T, acc, se, sp, auc
 
-def cutpoint_boot(features, labels, method='sss', train_ratio=0.7, 
-                  nruns=30, random_state=0, cutpoint_kw=None):
+def cutpoint_boot(features, labels, above=True, target='youdenj', method='sss', 
+                  train_ratio=0.7, nruns=30, random_state=0, 
+                  find_cutpoint_kw=None):
     """
     Compute/validate optimal cut-point trough bootstrapping.
     
@@ -161,6 +165,14 @@ def cutpoint_boot(features, labels, method='sss', train_ratio=0.7,
         Class label of each datapoint, where 0 indicates negative and 
         any other value positive. It is converted to ndarray of bool 
         internally.
+    above : bool
+        The direction of the inequality. If True the datapoints with
+        feature value above the threshold are flagged as positive,
+        and those with value below the threshold as negative. If False
+        the reverse happens.
+    target : str
+        The target function to maximise. See `find_cutpoint()` for
+        possible values.
     method : str
         The strategy for generating bootstratp repetitions - i.e.,
         subdivisions of the original data into train and test set.
@@ -176,13 +188,35 @@ def cutpoint_boot(features, labels, method='sss', train_ratio=0.7,
         Controls the randomness of the repetitions produced. Pass an 
         int for reproducible output across multiple function calls, 
         None for non-reproducible output.
-    cutpoint_kw : dict (optional)
-        Keyword arguments to be passed to the `cutpoint` function (see 
-        related documentation for details).
+    find_cutpoint_kw : dict (optional)
+        Keyword arguments to be passed to the `find_cutpoint` 
+        function (see related documentation for details).
+        
     Returns
     -------
+    cutpoints : ndarray of float (nruns, 1)
+        The optimal cut-point value for each bootstrap run estimated on the
+        train set.
+    aucs : ndarray of float (nruns, 1)
+        The area under the curve for each bootstrap run estimated on the train 
+        set.
+    performance_train : ndarray of float (nruns, 3)
+        In column-wise order, respectively accuracy, sensitivity and specificity 
+        yielded by the optimal cut-point value when applied to the train set.
+    performance_test : ndarray of float (nruns, 3)
+        In column-wise order, respectively accuracy, sensitivity and specificity 
+        yielded by the optimal cut-point value when applied to the test set.
+    performance_whole : ndarray of float (nruns, 3)
+        In column-wise order, respectively accuracy, sensitivity and specificity 
+        yielded by the optimal cut-point value when applied to the whole 
+        dataset.
     """
     check_same_length(features, labels)
+    
+    #Initialise output
+    cutpoints, aucs = [np.zeros(shape=(nruns,1), dtype=float) for _ in range(2)]
+    performance_train, performance_test, performance_whole =\
+        [np.zeros(shape=(nruns,3), dtype=float) for _ in range(3)]
     
     match method:
         case 'sss':
@@ -194,15 +228,51 @@ def cutpoint_boot(features, labels, method='sss', train_ratio=0.7,
         case _:
             raise ValueError(f'Unrecognised method `{method}`.')
         
-    for i, (train_idxs, test_idxs) in enumerate(
+    for split_idx, (train_idxs, test_idxs) in enumerate(
         splitter.split(X=features, y=labels)):
         
         train_features = features[train_idxs]
         train_labels = labels[train_idxs]
         test_features = features[test_idxs]
-        test_labels = labels[test_idxs]        
+        test_labels = labels[test_idxs]
+        
+        #Compute cut-point value and performance parameters on the train set
+        cutpoint, cutpoint_idx, _, acc, se, sp, auc =\
+            find_cutpoint(
+                train_features, train_labels, **find_cutpoint_kw
+            )        
+        
+        cutpoints[split_idx,0] = cutpoint
+        performance_train[split_idx,0:3] = acc[cutpoint_idx,0],\
+            se[cutpoint_idx,0], sp[cutpoint_idx,0]
+        aucs[split_idx,0] = auc
+        
+        #Compute performance parameters on the test set using the cut-point
+        #value determined on the train set
+        acc, se, sp, _, _, _ = _test_cutoff_values(
+            features=test_features, 
+            labels=test_labels, 
+            thresholds = np.array(cutpoint, ndmin=2), 
+            above=above, 
+            target=target
+        )
+        performance_test[split_idx,0:3] = acc[0,0], se[0,0], sp[0,0]
+        
+        #Compute performance parameters on the whole dataset using the cut-point
+        #value determined on the train set
+        acc, se, sp, _, _, _ = _test_cutoff_values(
+            features=features, 
+            labels=labels, 
+            thresholds = np.array(cutpoint, ndmin=2), 
+            above=above, 
+            target=target
+        )
+        performance_whole[split_idx,0:3] = acc[0,0], se[0,0], sp[0,0]        
+        
+    return cutpoints, aucs, performance_train, performance_test,\
+           performance_whole
 
-def test_cutoff_values(features, labels, thresholds, above, target):
+def _test_cutoff_values(features, labels, thresholds, above, target):
     """
     Test the classification performance of a set of cut-off values
     for a binary classification task.
@@ -228,7 +298,7 @@ def test_cutoff_values(features, labels, thresholds, above, target):
     Returns
     -------
     acc, se, sp : ndarrays of float, each of shape (n_thresholds, 1)
-        Accuracy, sensitivity ans pecificity as a function of the 
+        Accuracy, sensitivity and pecificity as a function of the 
         cut-off value.
     cutpoint : float    
         The optimal cut-off value.
@@ -256,7 +326,7 @@ def test_cutoff_values(features, labels, thresholds, above, target):
     
     #Optimal cutpoint
     thresholds = thresholds.T
-    cutpoint, cutpoint_idx = optimal_cutpoint(
+    cutpoint, cutpoint_idx = _compute_optimal_cutpoint(
         thresholds=thresholds, se=se, sp=sp, target=target)
     
     #AUC
