@@ -40,7 +40,17 @@ class CutpointCalculator():
             Number of thresholds generated. Has no effect if 
             `ìnterpolation` is None.
         """
-        self.target = target
+        
+        
+        if target not in ['youdenj', 'eucdist']:
+            raise ValueError(f'Target `{target}` not recognised.')
+        else:
+            self.target = target
+        #Not the best solution - refactoring is needed here
+        #Perhaps a function pointer is needed here- see also
+        #_compute_optimal_cutpoint
+        
+        
         self.above = polarity
         self.interpolation = interpolation
         self.num_points = num_points
