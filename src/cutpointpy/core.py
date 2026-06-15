@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import numpy as np
 from sklearn.model_selection import StratifiedShuffleSplit
 
@@ -17,11 +18,8 @@ class CutpointCalculator():
         target : str
             The target function to maximise or minimise. 
             Possible values:
-                'youdenj' -> Maximum Youden’s J
-                             (Sensitivity + Specificity - 1).
-                'eucdist' -> Minimum Euclidean distance between the 
-                             (0,1) point and the ROC curve in the 
-                             FPR/TPR space.
+                'youdenj' -> see `Youdenj` class documentation.
+                'eucdist' -> see `Eucdist` class documentation.
         polarity : bool
             The direction of the inequality. If True (False) the 
             datapoints with feature value greater (less) than or equal 
@@ -41,16 +39,14 @@ class CutpointCalculator():
             `ìnterpolation` is None.
         """
         
-        
-        if target not in ['youdenj', 'eucdist']:
-            raise ValueError(f'Target `{target}` not recognised.')
-        else:
-            self.target = target
-        #Not the best solution - refactoring is needed here
-        #Perhaps a function pointer is needed here- see also
-        #_compute_optimal_cutpoint
-        
-        
+        match target:
+            case 'eucdist':
+                self.optimal_cpcalculator = Eucdist()
+            case 'youdenj':
+                self.optimal_cpcalculator = Youdenj()
+            case _:
+                raise ValueError(f'Target `{target}` not recognised.')
+                
         self.above = polarity
         self.interpolation = interpolation
         self.num_points = num_points
@@ -242,51 +238,6 @@ class CutpointCalculator():
         return cutpoints, aucs, performance_train, performance_test,\
                performance_whole        
 
-    def _compute_optimal_cutpoint(self, thresholds, se, sp):
-        """
-        Determine the optimal cut-point given sensitivity and 
-        specificity as a function of the thresholds tested.
-    
-        Parameters
-        ----------
-        thresholds : ndarray of float (N,1)
-            The set of thresholds to test, sorted from smallest to 
-            largest.
-        se : ndarray of float (N,1)
-            Sensitivity as a function of the threshold.
-        sp : ndarray of float (N,1)
-            Specificity as a function of the threshold.
-                         
-        Returns
-        -------
-        cutpoint : numeric
-            The optimal cut-point value.
-        cutpoint_idx : int
-            The index corresponding to optimal cut-point value.
-        
-        Note
-        ----
-        If the maximum of the target function (`self.target`) occurs on 
-        multiple values of `thresholds`, the first (smallest) 
-        occurrence of `thresholds` is returned as the optimal cutpoint 
-        value. 
-        """
-        if not (thresholds.shape == se.shape == sp.shape):
-            raise ValueError(f'All of `thresholds`, `se` and `sp` should '
-                             f'have the same shape')
-
-        match self.target:
-            case 'youdenj':
-                target_values = se + sp - 1
-                idx = np.argmax(target_values)
-            case 'eucdist':
-                target_values = np.sqrt((1 - se)**2 + (1 - sp)**2)
-                idx = np.argmin(target_values)
-            case _:
-                raise ValueError(f'Target `{target}` not recognised.')
-        
-        return thresholds[idx, 0], idx
-
     def _test_cutoff_values(self, features, labels, thresholds):
         """
         Test the classification performance of a set of cut-off values
@@ -333,10 +284,78 @@ class CutpointCalculator():
     
         #Optimal cutpoint
         thresholds = thresholds.T
-        cutpoint, cutpoint_idx = self._compute_optimal_cutpoint(
-            thresholds=thresholds, se=se, sp=sp)
+        cutpoint, cutpoint_idx = self.optimal_cpcalculator.find(
+            thresholds=thresholds, se=se, sp=sp
+        )
     
         #AUC
         auc = area_under_curve(se=se, sp=sp).flatten()[0]
     
         return acc, se, sp, cutpoint, cutpoint_idx, auc
+    
+    
+class OptimalCutpointCalculator(ABC):
+    """
+    Encapsulates the target function to maximise or minimise. 
+    """
+    
+    @staticmethod
+    @abstractmethod
+    def find(thresholds, se, sp):
+        """
+        Determine the optimal cut-point given sensitivity and specificity as a
+        function of the thresholds tested.
+    
+        Parameters
+        ----------
+        thresholds : ndarray of float (N,1)
+            The set of thresholds to test, sorted from smallest to 
+            largest.
+        se : ndarray of float (N,1)
+            Sensitivity as a function of the threshold.
+        sp : ndarray of float (N,1)
+            Specificity as a function of the threshold.
+                         
+        Returns
+        -------
+        cutpoint : numeric
+            The optimal cut-point value.
+        cutpoint_idx : int
+            The index corresponding to optimal cut-point value.
+        """
+        pass
+    
+class Youdenj(OptimalCutpointCalculator):
+    """
+    Maximises Youden’s J - i.e.: Sensitivity + Specificity - 1.
+    """
+    
+    @staticmethod
+    def find(thresholds, se, sp):
+        """
+        Note
+        ----
+        If the maximum occurrs on multiple values of threshold the first
+        (smallest) occurrence is returned.
+        """
+        target_values = se + sp - 1
+        idx = np.argmax(target_values, axis=0).flatten()[0]
+        return thresholds[idx, 0], idx
+    
+class Eucdist(OptimalCutpointCalculator):
+    """
+    Minimises the Euclidean distance between the (0,1) point and the ROC curve
+    in the FPR (1 - sp) vs. TPR (se) space.
+    """
+    
+    @staticmethod
+    def find(thresholds, se, sp):
+        """
+        Note
+        ----
+        If the minimum occurrs on multiple values of threshold the last
+        (largest) occurrence is returned.
+        """        
+        target_values = np.sqrt((1 - se)**2 + (1 - sp)**2)
+        idx = np.argmin(target_values, axis=0).flatten()[-1]
+        return thresholds[idx, 0], idx
