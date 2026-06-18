@@ -35,8 +35,8 @@ class CutpointCalculator():
                             interpolation between the min and max value 
                             of `features`.
         num_points : unsigned int [optional]
-            Number of thresholds generated. Has no effect if 
-            `ìnterpolation` is None.
+            Number of thresholds generated. Has no effect if `interpolation`
+            is None.
         """
         
         match target:
@@ -58,12 +58,12 @@ class CutpointCalculator():
             
         Parameters
         ----------
-        features : iterable of numeric (n_samples)
+        features : array-like of numeric (n_samples)
             Value of the predictor variable for each datapoint. 
-            It is converted to ndarray of float internally.
-        labels : iterable of numeric (n_samples)
+            It is converted to an ndarray of float internally.
+        labels : array-like of numeric (n_samples)
             Class label of each datapoint, where 0 indicates negative 
-            and any other value positive. It is converted to ndarray of 
+            and any other value positive. It is converted to an ndarray of 
             bool internally.
    
         Returns
@@ -71,7 +71,7 @@ class CutpointCalculator():
         cutpoint : float
             The optimal cut-point value.
         cutpoint_idx : int
-            The index corresponding to optimal cut-point value.
+            The index corresponding to the optimal cut-point value.
         thresholds : ndarray of numeric (N,1)
             The thresholds tested. N = len(features) if `interpolation`
             is None, otherwise N = num_points.
@@ -138,10 +138,10 @@ class CutpointCalculator():
         
         Parameters
         ----------
-        features : iterable of numeric (n_samples)
+        features : array-like of numeric (n_samples)
             Value of the predictor variable for each datapoint. It is 
             converted to ndarray of float internally.
-        labels : iterable of numeric (n_samples)
+        labels : array-like of numeric (n_samples)
             Class label of each datapoint, where 0 indicates negative 
             and any other value positive. It is converted to ndarray of 
             bool internally.
