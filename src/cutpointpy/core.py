@@ -289,7 +289,7 @@ class CutpointCalculator():
         )
     
         #AUC
-        auc = area_under_curve(se=se, sp=sp).flatten()[0]
+        auc = area_under_curve(se=se.T, sp=sp.T).flatten()[0]
     
         return acc, se, sp, cutpoint, cutpoint_idx, auc
     
