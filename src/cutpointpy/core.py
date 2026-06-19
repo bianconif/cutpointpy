@@ -95,30 +95,30 @@ class CutpointCalculator():
             raise ValueError('There should be as many features as '
                              'labels')
             
-        #Labels and features: convert and reshape
-        labels = np.array(labels, dtype=bool, ndmin=2)
-        features = np.array(features, dtype=float, ndmin=2)
+        #Labels and features: cast and reshape
+        features, labels = self._cast_and_reshape(features, labels)
                 
         #Sort datapoints in ascending order by feature value
-        sorted_idxs = np.argsort(features.flatten())
-        features = features[:, sorted_idxs]
-        labels = labels[:,sorted_idxs]
+        sorted_idxs = np.argsort(features, axis=0)
+        features = np.take_along_axis(features, sorted_idxs, axis=0)
+        labels = np.take_along_axis(labels, sorted_idxs, axis=0)
                 
         #Define the set of thresholds to test as optimal cut-points
         if self.interpolation:
                     
-            lingrid = np.linspace(start=np.min(features[0, :]),
-                                  stop=np.max(features[0, :]),
+            lingrid = np.linspace(start=np.min(features[:, 0]),
+                                  stop=np.max(features[:, 0]),
                                   num=self.num_points)
                     
             match self.interpolation:
                 case 'linear':
                     thresholds = np.interp(
-                        x=lingrid, xp=features[0, :], fp=features[0, :])
-                    thresholds = np.array(thresholds, ndmin=2)
+                        x=lingrid, xp=features[:, 0], fp=features[:, 0])
                 case _:
                     raise ValueError(f'Interpolation "{interpolation}" '
                                      f'not recognised')
+            
+            thresholds.shape = (thresholds.size, 1)
         else:
             thresholds = features
                     
@@ -129,7 +129,7 @@ class CutpointCalculator():
                 thresholds=thresholds,
             )
                             
-        return cutpoint, cutpoint_idx, thresholds.T, acc, se, sp, auc
+        return cutpoint, cutpoint_idx, thresholds, acc, se, sp, auc
     
     def bootstrap(self, features, labels, method='sss', train_ratio=0.7, 
                   num_reps=30, random_state=0):
@@ -186,6 +186,8 @@ class CutpointCalculator():
             and specificity yielded by the optimal cut-point value when 
             applied to the whole dataset.
         """
+        
+        features, labels = self._cast_and_reshape(features, labels)
         
         #Initialise the output
         cutpoints, aucs_train, aucs_test =\
@@ -276,8 +278,8 @@ class CutpointCalculator():
     
         #Reshape features and thresholds for vectorisation. 
         #Prepend 'r_' to indicate the reshaped versions
-        r_features = np.tile(features, reps=(thresholds.size, 1))
-        r_thresholds = np.tile(thresholds.T, reps=(1, features.size))
+        r_features = np.tile(features.T, reps=(thresholds.size, 1))
+        r_thresholds = np.tile(thresholds, reps=(1, features.size))
 
         #Predicted labels as a function of threshold
         if self.above:
@@ -287,11 +289,10 @@ class CutpointCalculator():
     
         #Sensitivity and specificity as a function of threshold
         confmat = cm(predicted=predicted,
-                     target=np.tile(labels, reps=(thresholds.size, 1)))
+                     target=np.tile(labels.T, reps=(thresholds.size, 1)))
         acc, se, sp = cm_performance_metrics(confmat)
     
         #Optimal cutpoint
-        thresholds = thresholds.T
         cutpoint, cutpoint_idx = self.optimal_cpcalculator.find(
             thresholds=thresholds, se=se, sp=sp
         )
@@ -300,6 +301,38 @@ class CutpointCalculator():
         auc = area_under_curve(se=se.T, sp=sp.T).flatten()[0]
     
         return acc, se, sp, cutpoint, cutpoint_idx, auc
+    
+    @staticmethod
+    def _cast_and_reshape(features, labels):
+        """
+        Convert and reshape features and labels to ndarray.
+        
+        Parameters
+        ----------
+        features : array-like of numeric (n_samples)
+            Value of the predictor variable for each datapoint. 
+        labels : array-like of numeric (n_samples)
+            Class label of each datapoint, where 0 indicates negative 
+            and any other value positive.
+            
+        Returns
+        -------
+        features : ndarray of float (n_samples, 1)
+            Cast and reshaped features.
+        labels : ndarray of bool (n_samples, 1)
+            Cast and reshaped labels.
+        """
+        
+        check_same_length(features, labels)
+         
+        features = np.array(features, dtype=float, ndmin=2)
+        labels = np.array(labels, dtype=bool, ndmin=2)
+        
+        for item in [features, labels]:
+            item.shape = (features.size, 1)
+        
+        return features, labels
+    
     
     
 class OptimalCutpointCalculator(ABC):
