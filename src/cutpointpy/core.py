@@ -146,8 +146,9 @@ class CutpointCalculator():
             and any other value positive. It is converted to ndarray of 
             bool internally.
         method : str
-            The strategy for generating bootstratp repetitions - i.e.,
-            subdivisions of the original data into train and test set.
+            The strategy for generating the bootstratp repetitions-i.e.,
+            the subdivisions of the original data into train (in-bag
+            data) and test set (out-of-bag data).
             Possible values:
                 `sss` -> Stratified shuffle split
         train_ratio : float [0.0, 1.0]
@@ -166,9 +167,12 @@ class CutpointCalculator():
         cutpoints : ndarray of float (num_reps, 1)
             The optimal cut-point value for each repetition estimated 
             on the train set.
-        aucs : ndarray of float (num_reps, 1)
+        aucs_train : ndarray of float (num_reps, 1)
             The area under the curve for each repetition estimated on 
             the train set.
+        aucs_test : ndarray of float (num_reps, 1)
+            The area under the curve for each repetition estimated on 
+            the test set.
         performance_train : ndarray of float (num_reps, 3)
             In column-wise order, respectively accuracy, sensitivity 
             and specificity yielded by the optimal cut-point value when 
@@ -184,8 +188,8 @@ class CutpointCalculator():
         """
         
         #Initialise the output
-        cutpoints, aucs =\
-            [np.zeros(shape=(num_reps,1), dtype=float) for _ in range(2)]
+        cutpoints, aucs_train, aucs_test =\
+            [np.zeros(shape=(num_reps,1), dtype=float) for _ in range(3)]
         performance_train, performance_test, performance_whole =\
             [np.zeros(shape=(num_reps,3), dtype=float) for _ in range(3)]
         
@@ -215,7 +219,11 @@ class CutpointCalculator():
             cutpoints[split_idx,0] = cutpoint
             performance_train[split_idx,0:3] = acc[cutpoint_idx,0],\
                 se[cutpoint_idx,0], sp[cutpoint_idx,0]
-            aucs[split_idx,0] = auc
+            aucs_train[split_idx,0] = auc
+            
+            #Compute auc on the test set
+            _, _, _, _, _, _, aucs_test[split_idx,0] =\
+                self.find(test_features, test_labels)            
             
             #Compute performance parameters on the test set using the 
             #cut-point value estimated on the train set
@@ -235,8 +243,8 @@ class CutpointCalculator():
             )
             performance_whole[split_idx,0:3] = acc[0,0], se[0,0], sp[0,0]        
             
-        return cutpoints, aucs, performance_train, performance_test,\
-               performance_whole        
+        return cutpoints, aucs_train, aucs_test, performance_train,\
+               performance_test, performance_whole        
 
     def _test_cutoff_values(self, features, labels, thresholds):
         """
