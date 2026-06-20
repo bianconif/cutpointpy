@@ -27,7 +27,7 @@ class CutpointCalculator():
             as negative.
         interpolation : str [optional]
             Interpolation method for generating the set of thresholds
-            tested. Possible values:
+            to test. Possible values:
                 None     -> No interpolation is used. The optimal 
                             cut-point is chosen among the feature 
                             values.
@@ -71,7 +71,8 @@ class CutpointCalculator():
         cutpoint : float
             The optimal cut-point value.
         cutpoint_idx : int
-            The index corresponding to the optimal cut-point value.
+            The index corresponding to the optimal cut-point value
+            among the thresholds tested.
         thresholds : ndarray of numeric (N,1)
             The thresholds tested. N = len(features) if `interpolation`
             is None, otherwise N = num_points.
@@ -103,7 +104,7 @@ class CutpointCalculator():
         features = np.take_along_axis(features, sorted_idxs, axis=0)
         labels = np.take_along_axis(labels, sorted_idxs, axis=0)
                 
-        #Define the set of thresholds to test as optimal cut-points
+        #Define the set of thresholds to test
         if self.interpolation:
                     
             lingrid = np.linspace(start=np.min(features[:, 0]),
@@ -134,7 +135,7 @@ class CutpointCalculator():
     def bootstrap(self, features, labels, method='sss', train_ratio=0.7, 
                   num_reps=30, random_state=0):
         """
-        Compute/validate optimal cut-point trough bootstrapping.
+        Compute/validate optimal cut-point through bootstrapping.
         
         Parameters
         ----------
@@ -152,8 +153,8 @@ class CutpointCalculator():
             Possible values:
                 `sss` -> Stratified shuffle split
         train_ratio : float [0.0, 1.0]
-            The proportion of the original data used to estimate the 
-            cut-point value (train set) at each repetition.
+            The proportion of the original data used to generate the 
+            train set at each repetition.
         num_reps : int
             Number of bootstrap repetitions (i.e., number of 
             subdivisions into train and test set).
@@ -174,17 +175,17 @@ class CutpointCalculator():
             The area under the curve for each repetition estimated on 
             the test set.
         performance_train : ndarray of float (num_reps, 3)
-            In column-wise order, respectively accuracy, sensitivity 
-            and specificity yielded by the optimal cut-point value when 
-            applied to the train set.
+            For each repetition, in column-wise order, respectively 
+            accuracy, sensitivity and specificity yielded by the optimal
+            cut-point value when applied to the train set.
         performance_test : ndarray of float (num_reps, 3)
-            In column-wise order, respectively accuracy, sensitivity 
-            and specificity yielded by the optimal cut-point value when 
-            applied to the test set.
+            For each repetition, in column-wise order, respectively
+            accuracy, sensitivity and specificity yielded by the optimal
+            cut-point value when applied to the test set.
         performance_whole : ndarray of float (num_reps, 3)
-            In column-wise order, respectively accuracy, sensitivity 
-            and specificity yielded by the optimal cut-point value when 
-            applied to the whole dataset.
+            For each repetition, in column-wise order, respectively
+            accuracy, sensitivity and specificity yielded by the optimal
+            cut-point value when applied to the whole dataset.
         """
         
         features, labels = self._cast_and_reshape(features, labels)
@@ -250,8 +251,9 @@ class CutpointCalculator():
 
     def _test_cutoff_values(self, features, labels, thresholds):
         """
-        Test the classification performance of a set of cut-off values
-        for a binary classification task.
+        Classification performance of a set of cut-off values
+        (thresholds) when applied to a predictor variable (feature) for
+        a binary classification task.
     
         Parameters
         ----------
@@ -281,23 +283,23 @@ class CutpointCalculator():
         r_features = np.tile(features.T, reps=(thresholds.size, 1))
         r_thresholds = np.tile(thresholds, reps=(1, features.size))
 
-        #Predicted labels as a function of threshold
+        #Predict labels as a function of threshold
         if self.above:
             predicted = (r_features >= r_thresholds)
         else:
             predicted = (r_features <= r_thresholds)
     
-        #Sensitivity and specificity as a function of threshold
+        #Compute sensitivity and specificity as a function of threshold
         confmat = cm(predicted=predicted,
                      target=np.tile(labels.T, reps=(thresholds.size, 1)))
         acc, se, sp = cm_performance_metrics(confmat)
     
-        #Optimal cutpoint
+        #Compute optimal cutpoint
         cutpoint, cutpoint_idx = self.optimal_cpcalculator.find(
             thresholds=thresholds, se=se, sp=sp
         )
     
-        #AUC
+        #Compute AUC
         auc = area_under_curve(se=se.T, sp=sp.T).flatten()[0]
     
         return acc, se, sp, cutpoint, cutpoint_idx, auc
