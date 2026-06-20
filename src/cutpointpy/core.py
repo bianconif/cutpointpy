@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from itertools import product
 import numpy as np
 from sklearn.model_selection import StratifiedShuffleSplit
 
@@ -101,8 +102,9 @@ class CutpointCalculator():
                 
         #Sort datapoints in ascending order by feature value
         sorted_idxs = np.argsort(features, axis=0)
-        features = np.take_along_axis(features, sorted_idxs, axis=0)
-        labels = np.take_along_axis(labels, sorted_idxs, axis=0)
+        features, labels =\
+            [np.take_along_axis(x, sorted_idxs, axis=0) for x in 
+             [features, labels]]
                 
         #Define the set of thresholds to test
         if self.interpolation:
@@ -209,10 +211,9 @@ class CutpointCalculator():
         for split_idx, (train_idxs, test_idxs) in enumerate(
             splitter.split(X=features, y=labels)):
             
-            train_features = features[train_idxs]
-            train_labels = labels[train_idxs]
-            test_features = features[test_idxs]
-            test_labels = labels[test_idxs]
+            [train_features, test_features, train_labels, test_labels]=\
+                [container[idxs] for container, idxs in 
+                 product((features, labels), (train_idxs, test_idxs))]
             
             #Compute cut-point value and performance parameters on the 
             #train set
