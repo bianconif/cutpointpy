@@ -170,6 +170,9 @@ class CutpointCalculator():
         cutpoints : ndarray of float (num_reps, 1)
             The optimal cut-point value for each repetition estimated 
             on the train set.
+        cutpoints_idxs : ndarray of float (num_reps, 1)
+            For each repetition the index of the optimal cut-point value
+            correspoinding to the thresholds tested on the train set.
         aucs_train : ndarray of float (num_reps, 1)
             The area under the curve for each repetition estimated on 
             the train set.
@@ -193,8 +196,8 @@ class CutpointCalculator():
         features, labels = self._cast_and_reshape(features, labels)
         
         #Initialise the output
-        cutpoints, aucs_train, aucs_test =\
-            [np.zeros(shape=(num_reps,1), dtype=float) for _ in range(3)]
+        cutpoints, cutpoints_idxs, aucs_train, aucs_test =\
+            [np.zeros(shape=(num_reps,1), dtype=float) for _ in range(4)]
         performance_train, performance_test, performance_whole =\
             [np.zeros(shape=(num_reps,3), dtype=float) for _ in range(3)]
         
@@ -221,6 +224,7 @@ class CutpointCalculator():
                 self.find(train_features, train_labels)        
             
             cutpoints[split_idx,0] = cutpoint
+            cutpoints_idxs[split_idx,0] = cutpoint_idx
             performance_train[split_idx,0:3] = acc[cutpoint_idx,0],\
                 se[cutpoint_idx,0], sp[cutpoint_idx,0]
             aucs_train[split_idx,0] = auc
@@ -247,8 +251,8 @@ class CutpointCalculator():
             )
             performance_whole[split_idx,0:3] = acc[0,0], se[0,0], sp[0,0]        
             
-        return cutpoints, aucs_train, aucs_test, performance_train,\
-               performance_test, performance_whole        
+        return cutpoints, cutpoints_idxs, aucs_train, aucs_test,\
+               performance_train, performance_test, performance_whole        
 
     def _test_cutoff_values(self, features, labels, thresholds):
         """
