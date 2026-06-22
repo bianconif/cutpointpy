@@ -180,6 +180,15 @@ class CutpointCalculator():
             N = floor(len(`features`) * `train_ratio`) if
             `self.interpolation` is None, otherwise N =
             `self.num_points`.
+        accs : ndarray of float (num_reps, N)
+            Accuracy on the train set for each repetition and threshold
+            value tested.
+        ses : ndarray of float (num_reps, N)
+            Sensitivity on the train set for each repetition and
+            threshold value tested.
+        sps : ndarray of float (num_reps, N)
+            Specificity on the train set for each repetition and
+            threshold value tested.    
         aucs_train : ndarray of float (num_reps, 1)
             The area under the curve for each repetition estimated on 
             the train set.
@@ -218,9 +227,9 @@ class CutpointCalculator():
                 dtype=int, casting='unsafe'
             )
             
-        thresholds, =\
+        thresholds, accs, ses, sps = \
             [np.zeros(shape=(num_reps, num_thresholds), dtype=float) 
-             for _ in range(1)]
+             for _ in range(4)]
         #===============================================================
         #===============================================================
         #===============================================================
@@ -243,18 +252,27 @@ class CutpointCalculator():
                 [container[idxs] for container, idxs in 
                  product((features, labels), (train_idxs, test_idxs))]
             
-            #Compute cut-point value and performance parameters on the 
-            #train set
+            #===========================================================
+            #==== Return values computed on the train (in bag) data ====
+            #===========================================================
             cutpoint, cutpoint_idx, thresholds_, acc, se, sp, auc =\
                 self.find(train_features, train_labels)        
             
-            cutpoints[split_idx,0] = cutpoint
-            cutpoints_idxs[split_idx,0] = cutpoint_idx
-            thresholds[split_idx,:] = thresholds_.flat
+            for out_, in_ in zip((cutpoints, cutpoints_idxs), 
+                                 (cutpoint, cutpoint_idx)):
+                out_[split_idx,:] = in_            
             
-            performance_train[split_idx,0:3] = acc[cutpoint_idx,0],\
-                se[cutpoint_idx,0], sp[cutpoint_idx,0]
+            for out_, in_ in zip((thresholds, accs, ses, sps), 
+                                 (thresholds_, acc, se, sp)):
+                out_[split_idx,:] = in_.flat
+            
+            for i, in_ in enumerate([acc, se, sp]):
+                performance_train[split_idx, i] = in_[cutpoint_idx,0]
+            
             aucs_train[split_idx,0] = auc
+            #===========================================================
+            #===========================================================
+            #===========================================================
             
             #Compute auc on the test set
             _, _, _, _, _, _, aucs_test[split_idx,0] =\
@@ -267,7 +285,8 @@ class CutpointCalculator():
                 labels=test_labels, 
                 thresholds = np.array(cutpoint, ndmin=2), 
             )
-            performance_test[split_idx,0:3] = acc[0,0], se[0,0], sp[0,0]
+            for i, in_ in enumerate([acc, se, sp]):
+                performance_test[split_idx, i] = in_[0,0]            
             
             #Compute performance parameters on the whole dataset using 
             #the cut-point value estimated on the train set
@@ -276,10 +295,12 @@ class CutpointCalculator():
                 labels=labels, 
                 thresholds = np.array(cutpoint, ndmin=2), 
             )
-            performance_whole[split_idx,0:3] = acc[0,0], se[0,0], sp[0,0]        
+            for i, in_ in enumerate([acc, se, sp]):
+                performance_whole[split_idx, i] = in_[0,0]      
             
-        return cutpoints, cutpoints_idxs, thresholds, aucs_train, aucs_test,\
-               performance_train, performance_test, performance_whole        
+        return cutpoints, cutpoints_idxs, thresholds, accs, ses, sps,\
+               aucs_train, aucs_test, performance_train,\
+               performance_test, performance_whole        
 
     def _test_cutoff_values(self, features, labels, thresholds):
         """
