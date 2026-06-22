@@ -171,18 +171,18 @@ class CutpointCalculator():
             The optimal cut-point value for each repetition estimated 
             on the train set.
         cutpoints_idxs : ndarray of float (num_reps, 1)
-            For each repetition the index of the optimal cut-point value
-            correspoinding to the thresholds tested on the train set.
+            For each repetition the index of the `thresholds` array that
+            corresponds to the optimal cut-point.
         thresholds : ndarray of float (num_reps, N)
             The values of the thresholds tested on the train set at each
-            repetion. Element [i,j] of the matrix represents the j-th
+            repetition. Element [i,j] of the matrix represents the j-th
             threshold value for repetition i. 
             N = floor(len(`features`) * `train_ratio`) if
             `self.interpolation` is None, otherwise N =
             `self.num_points`.
         accs : ndarray of float (num_reps, N)
             Accuracy on the train set for each repetition and threshold
-            value tested.
+            value tested. 
         ses : ndarray of float (num_reps, N)
             Sensitivity on the train set for each repetition and
             threshold value tested.
@@ -190,11 +190,11 @@ class CutpointCalculator():
             Specificity on the train set for each repetition and
             threshold value tested.    
         aucs_train : ndarray of float (num_reps, 1)
-            The area under the curve for each repetition estimated on 
-            the train set.
+            The area under the curve estimated on the train set for each
+            repetition .
         aucs_test : ndarray of float (num_reps, 1)
-            The area under the curve for each repetition estimated on 
-            the test set.
+            The area under the curve estimated on the test set for each
+            repetition .
         performance_train : ndarray of float (num_reps, 3)
             For each repetition, in column-wise order, respectively 
             accuracy, sensitivity and specificity yielded by the optimal
