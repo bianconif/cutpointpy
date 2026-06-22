@@ -75,8 +75,8 @@ class CutpointCalculator():
             The index corresponding to the optimal cut-point value
             among the thresholds tested.
         thresholds : ndarray of numeric (N,1)
-            The thresholds tested. N = len(features) if `interpolation`
-            is None, otherwise N = num_points.
+            The thresholds tested. N = len(features) if 
+            `self.interpolation` is None, otherwise N = num_points.
         acc : ndarray of numeric (N,1)
             Accuracy as a function of the thresholds.
         se : ndarray of numeric (N,1)
@@ -173,6 +173,13 @@ class CutpointCalculator():
         cutpoints_idxs : ndarray of float (num_reps, 1)
             For each repetition the index of the optimal cut-point value
             correspoinding to the thresholds tested on the train set.
+        thresholds : ndarray of float (num_reps, N)
+            The values of the thresholds tested on the train set at each
+            repetion. Element [i,j] of the matrix represents the j-th
+            threshold value for repetition i. 
+            N = floor(len(`features`) * `train_ratio`) if
+            `self.interpolation` is None, otherwise N =
+            `self.num_points`.
         aucs_train : ndarray of float (num_reps, 1)
             The area under the curve for each repetition estimated on 
             the train set.
@@ -195,11 +202,29 @@ class CutpointCalculator():
         
         features, labels = self._cast_and_reshape(features, labels)
         
-        #Initialise the output
+        #===============================================================
+        #================ Initialise the output ========================
+        #===============================================================
         cutpoints, cutpoints_idxs, aucs_train, aucs_test =\
             [np.zeros(shape=(num_reps,1), dtype=float) for _ in range(4)]
         performance_train, performance_test, performance_whole =\
             [np.zeros(shape=(num_reps,3), dtype=float) for _ in range(3)]
+        
+        if self.interpolation:
+            num_thresholds = self.num_points
+        else:
+            num_thresholds = np.floor(
+                len(features) * train_ratio, 
+                dtype=int, casting='unsafe'
+            )
+            
+        thresholds, =\
+            [np.zeros(shape=(num_reps, num_thresholds), dtype=float) 
+             for _ in range(1)]
+        #===============================================================
+        #===============================================================
+        #===============================================================
+        
         
         match method:
             case 'sss':
@@ -220,11 +245,13 @@ class CutpointCalculator():
             
             #Compute cut-point value and performance parameters on the 
             #train set
-            cutpoint, cutpoint_idx, _, acc, se, sp, auc =\
+            cutpoint, cutpoint_idx, thresholds_, acc, se, sp, auc =\
                 self.find(train_features, train_labels)        
             
             cutpoints[split_idx,0] = cutpoint
             cutpoints_idxs[split_idx,0] = cutpoint_idx
+            thresholds[split_idx,:] = thresholds_.flat
+            
             performance_train[split_idx,0:3] = acc[cutpoint_idx,0],\
                 se[cutpoint_idx,0], sp[cutpoint_idx,0]
             aucs_train[split_idx,0] = auc
@@ -251,7 +278,7 @@ class CutpointCalculator():
             )
             performance_whole[split_idx,0:3] = acc[0,0], se[0,0], sp[0,0]        
             
-        return cutpoints, cutpoints_idxs, aucs_train, aucs_test,\
+        return cutpoints, cutpoints_idxs, thresholds, aucs_train, aucs_test,\
                performance_train, performance_test, performance_whole        
 
     def _test_cutoff_values(self, features, labels, thresholds):
