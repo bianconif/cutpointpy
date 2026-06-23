@@ -247,8 +247,8 @@ class CutpointCalculator():
             
         for split_idx, (train_idxs, test_idxs) in enumerate(
             splitter.split(X=features, y=labels)):
-            
-            [train_features, test_features, train_labels, test_labels]=\
+                        
+            train_features, test_features, train_labels, test_labels = \
                 [container[idxs] for container, idxs in 
                  product((features, labels), (train_idxs, test_idxs))]
             
@@ -256,12 +256,12 @@ class CutpointCalculator():
             #==== Return values computed on the train (in bag) data ====
             #===========================================================
             cutpoint, cutpoint_idx, thresholds_, acc, se, sp, auc =\
-                self.find(train_features, train_labels)        
+                self.find(train_features, train_labels)
             
             for out_, in_ in zip((cutpoints, cutpoints_idxs), 
                                  (cutpoint, cutpoint_idx)):
-                out_[split_idx,:] = in_            
-            
+                out_[split_idx] = in_            
+                        
             for out_, in_ in zip((thresholds, accs, ses, sps), 
                                  (thresholds_, acc, se, sp)):
                 out_[split_idx,:] = in_.flat
