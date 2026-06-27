@@ -11,6 +11,9 @@ dependencies = [
     'numpy',
     'scikit-learn',
 ]
+dynamic = [
+    'version'
+]
 keywords = ['binary classification',
             'optimal cut-point',
             'ROC analysis',
@@ -21,7 +24,7 @@ license-files = ['LICENSE']
 name = 'cutpointpy'
 readme = 'README.md'
 requires-python = '>=3.14'
-version = '0.1.0'
+
 
 [project.urls]
 home = 'https://github.com/bianconif/cutpointpy'
@@ -29,3 +32,7 @@ repository = 'https://github.com/bianconif/cutpointpy'
 
 [tool.setuptools.packages.find]
 where = ['src']
+
+[tool.setuptools_scm]
+local_scheme = 'no-local-version'
+version_scheme = 'no-guess-dev'
