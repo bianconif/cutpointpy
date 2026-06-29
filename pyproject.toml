@@ -14,9 +14,9 @@ dependencies = [
 dynamic = [
     'version'
 ]
-keywords = ['binary classification',
-            'optimal cut-point',
-            'ROC analysis',
+keywords = ['binary-classification',
+            'cut-point',
+            'roc-analysis',
             'sensitivity',
             'specificity']
 license = 'GPL-3.0-or-later'
